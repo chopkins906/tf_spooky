@@ -1,18 +1,3 @@
-# Copyright 2015 The TensorFlow Authors. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ==============================================================================
-
 """Example / benchmark for building a PTB LSTM model.
 Trains the model described in:
 (Zaremba, et. al.) Recurrent Neural Network Regularization
@@ -40,12 +25,12 @@ The hyperparameters used in the model:
 - rnn_mode - the low level implementation of lstm cell: one of CUDNN,
              BASIC, or BLOCK, representing cudnn_lstm, basic_lstm, and
              lstm_block_cell classes.
-The data required for this example is in the data/ dir of the
-PTB dataset from Tomas Mikolov's webpage:
-$ wget http://www.fit.vutbr.cz/~imikolov/rnnlm/simple-examples.tgz
-$ tar xvf simple-examples.tgz
+
 To run:
-$ python ptb_word_lm.py --data_path=simple-examples/data/
+To train:
+$ python ptb_word_lm.py --data_path=<data_dir> --save_path=<training_dir>
+To test:
+$ python ptb_word_lm.py --data_path=<data_dir> --load_path=<test_dir printed during training>
 """
 from __future__ import absolute_import
 from __future__ import division
@@ -131,10 +116,17 @@ class PTBModel(object):
     size = config.hidden_size
     vocab_size = config.vocab_size
 
-    with tf.device("/cpu:0"):
-      embedding = tf.get_variable(
-          "embedding", [vocab_size, size], dtype=data_type())
-      inputs = tf.nn.embedding_lookup(embedding, input_.input_data)
+    if not is_training:
+      self.x = tf.placeholder(tf.int32, shape=[1,1])
+      with tf.device("/cpu:0"):
+        embedding = tf.get_variable(
+            "embedding", [vocab_size, size], dtype=data_type())
+        inputs = tf.nn.embedding_lookup(embedding, self.x)
+    else:
+      with tf.device("/cpu:0"):
+        embedding = tf.get_variable(
+            "embedding", [vocab_size, size], dtype=data_type())
+        inputs = tf.nn.embedding_lookup(embedding, input_.input_data)
 
     if is_training and config.keep_prob < 1:
       inputs = tf.nn.dropout(inputs, config.keep_prob)
@@ -351,20 +343,36 @@ class SmallConfig(object):
   rnn_mode = BASIC
 
 
+#class MediumConfig(object):
+#  """Medium config."""
+#  init_scale = 0.05
+#  learning_rate = 0.825#1.0
+#  max_grad_norm = 5
+#  num_layers = 3#2
+#  num_steps = 35
+#  hidden_size = 650
+#  max_epoch = 10#6
+#  max_max_epoch = 50#39
+#  keep_prob = 0.4#0.5
+#  lr_decay = 0.85#0.8
+#  batch_size = 30#20
+#  vocab_size = 24911#25369
+#  rnn_mode = BLOCK
+  
 class MediumConfig(object):
   """Medium config."""
   init_scale = 0.05
-  learning_rate = 0.825#1.0
+  learning_rate = 1.0
   max_grad_norm = 5
-  num_layers = 3#2
+  num_layers = 2
   num_steps = 35
   hidden_size = 650
-  max_epoch = 10#6
-  max_max_epoch = 50#39
-  keep_prob = 0.4#0.5
-  lr_decay = 0.85#0.8
-  batch_size = 30#20
-  vocab_size = 24911#25369
+  max_epoch = 6
+  max_max_epoch = 39
+  keep_prob = 0.5
+  lr_decay = 0.8
+  batch_size = 20
+  vocab_size = 25369
   rnn_mode = BLOCK
 
 
@@ -402,58 +410,25 @@ class TestConfig(object):
   rnn_mode = BLOCK
 
 
-def run_epoch(session, model, eval_op=None, verbose=False, load=False, input=None):
+def run_epoch(session, model, eval_op=None, verbose=False, ep_size=None, input=None, of=None):
   """Runs the model on the given data."""
   start_time = time.time()
   costs = 0.0
   iters = 0  
-  if load:
-    graph = tf.get_default_graph()
-    for s in graph.get_operations():
-      if "RNN" in s.name:
-        print(s.name)
-    logits = graph.get_tensor_by_name("Test/Model/LOGITS:0") #tf.get_collection_ref(util.with_prefix("Test", "logits"))[0]
-    #cell = tf.contrib.rnn.BasicLSTMCell(
-    #        get_config().hidden_size, forget_bias=0.0, state_is_tuple=True,
-    #        reuse=True)
-    #cell = tf.contrib.rnn.MultiRNNCell(
-    #    [cell for _ in range(get_config().num_layers)], state_is_tuple=True)
-    #initial_state = cell.zero_state(1, data_type())
-    initial_state1 = graph.get_tensor_by_name("Test/Model/MultiRNNCellZeroState/BasicLSTMCellZeroState/zeros:0")
-    initial_state2 = graph.get_tensor_by_name("Test/Model/MultiRNNCellZeroState/BasicLSTMCellZeroState/zeros_1:0")
-    initial_state3 = graph.get_tensor_by_name("Test/Model/MultiRNNCellZeroState/BasicLSTMCellZeroState_1/zeros:0")
-    initial_state4 = graph.get_tensor_by_name("Test/Model/MultiRNNCellZeroState/BasicLSTMCellZeroState_1/zeros_1:0")
+  
+  #  initial_state1 = graph.get_tensor_by_name("Test/Model/MultiRNNCellZeroState/BasicLSTMCellZeroState/zeros:0")
+  #  initial_state2 = graph.get_tensor_by_name("Test/Model/MultiRNNCellZeroState/BasicLSTMCellZeroState/zeros_1:0")
+  #  initial_state3 = graph.get_tensor_by_name("Test/Model/MultiRNNCellZeroState/BasicLSTMCellZeroState_1/zeros:0")
+  #  initial_state4 = graph.get_tensor_by_name("Test/Model/MultiRNNCellZeroState/BasicLSTMCellZeroState_1/zeros_1:0")
     
-    final_state1 = graph.get_tensor_by_name("Test/Model/RNN/RNN/multi_rnn_cell/cell_0/cell_0/basic_lstm_cell/add_1:0")
-    final_state2 = graph.get_tensor_by_name("Test/Model/RNN/RNN/multi_rnn_cell/cell_0/cell_0/basic_lstm_cell/mul_2:0")
-    final_state3 = graph.get_tensor_by_name("Test/Model/RNN/RNN/multi_rnn_cell/cell_0/cell_0/basic_lstm_cell/add_3:0")
-    final_state4 = graph.get_tensor_by_name("Test/Model/RNN/RNN/multi_rnn_cell/cell_0/cell_0/basic_lstm_cell/mul_5:0")
-    #initial_state = tf.contrib.rnn.MultiRNNCell.zero_state(1, data_type()) 
-    initial_state = (tf.contrib.rnn.LSTMStateTuple(c=initial_state1,h=initial_state2), tf.contrib.rnn.LSTMStateTuple(c=initial_state3,h=initial_state4))
-    final_state = (tf.contrib.rnn.LSTMStateTuple(c=final_state1,h=final_state2), tf.contrib.rnn.LSTMStateTuple(c=final_state3,h=final_state4))
-    state = session.run(initial_state)
-    print(initial_state)
-    #print(initial_state1)
-    #print(initial_state2)
-    #print(initial_state3)
-    #print(initial_state4)
-    #print(initial_state)
-    #print(cell)
-    fetches = {
-        "logits": logits,
-        "final_state": final_state,
-    }
-    for step in range(input.epoch_size):
-      feed_dict = {}
-      for i, (c, h) in enumerate(initial_state):
-        feed_dict[c] = state[i].c
-        feed_dict[h] = state[i].h
-
-      vals = session.run(fetches, feed_dict)
-      logits = vals["logits"]
-      state = vals["final_state"]
-    print(logits)
-    return
+  #  final_state1 = graph.get_tensor_by_name("Test/Model/RNN/RNN/multi_rnn_cell/cell_0/cell_0/basic_lstm_cell/add_1:0")
+  #  final_state2 = graph.get_tensor_by_name("Test/Model/RNN/RNN/multi_rnn_cell/cell_0/cell_0/basic_lstm_cell/mul_2:0")
+  #  final_state3 = graph.get_tensor_by_name("Test/Model/RNN/RNN/multi_rnn_cell/cell_0/cell_0/basic_lstm_cell/add_3:0")
+  #  final_state4 = graph.get_tensor_by_name("Test/Model/RNN/RNN/multi_rnn_cell/cell_0/cell_0/basic_lstm_cell/mul_5:0")
+   
+  #  initial_state = (tf.contrib.rnn.LSTMStateTuple(c=initial_state1,h=initial_state2), tf.contrib.rnn.LSTMStateTuple(c=initial_state3,h=initial_state4))
+  #  final_state = (tf.contrib.rnn.LSTMStateTuple(c=final_state1,h=final_state2), tf.contrib.rnn.LSTMStateTuple(c=final_state3,h=final_state4))
+  
       
   state = session.run(model.initial_state)
   fetches = {
@@ -467,12 +442,14 @@ def run_epoch(session, model, eval_op=None, verbose=False, load=False, input=Non
     fetches["eval_op"] = eval_op
 
   tf.train.start_queue_runners(session)
-  for step in range(model.input.epoch_size):
+  for step in range(ep_size):
     feed_dict = {}
     for i, (c, h) in enumerate(model.initial_state):
       feed_dict[c] = state[i].c
       feed_dict[h] = state[i].h
-
+    
+    feed_dict[model.x] = [[input[step]]]
+      
     vals = session.run(fetches, feed_dict)
     cost = vals["cost"]
     state = vals["final_state"]
@@ -487,11 +464,12 @@ def run_epoch(session, model, eval_op=None, verbose=False, load=False, input=Non
              iters * model.input.batch_size * max(1, FLAGS.num_gpus) /
              (time.time() - start_time)))
 
+  of.write(str(logits[0][0]) + " " + str(logits[0][1]) + " " + str(logits[0][2]) + "\n")
   #print(logits)
   max_val = 0
   ind = 0
   max_ind = -1
-  print(logits[0][0],logits[0][1],logits[0][2])
+  #print("%6.2f%6.2f%6.2f" % (logits[0][0],logits[0][1],logits[0][2]))
   return np.exp(costs / iters)
   for l in logits[0]:
     if l > max_val:
@@ -550,7 +528,13 @@ def main(_):
   eval_config.num_steps = 1
 
   with tf.Graph().as_default():
+  
+    # If we are testing an existing model ...
     if FLAGS.load_path:
+      # NOTE: there are two ways to restore an existing model, rebuilding the graph from scratch then 
+      # calling saver.restore for those objects, or importing the old metagraph then calling saver.restore
+      # and then fetching the ops/tensors via methods like get_tensor_by_name
+      # what follows is the first method
       with tf.name_scope("Train"):
         train_input = PTBInput(config=config, data=train_data, name="TrainInput")
         with tf.variable_scope("Model", reuse=None):
@@ -566,21 +550,39 @@ def main(_):
       session = tf.InteractiveSession()
       saver = tf.train.Saver()#tf.train.import_meta_graph(FLAGS.load_path + ".meta")
       saver.restore(session, FLAGS.load_path)
+      #tf.train.start_queue_runners(session)
+      #print(session.run(test_input.input_data))
+      #print(session.run(test_input.input_data))
+      #print(session.run(test_input.input_data))
+      #quit()
       #mtest.import_ops()
       print("Model restored from %s." % FLAGS.load_path)
-      run_epoch(session, mtest, load=False, input=test_input)
+      of = open("output", 'w')
+      run_epoch(session, mtest, input=test_data[0], ep_size=len(test_data[0]), of=of)
+      #run_epoch(session, mtest, input=test_input)#, ep_size=len(test_data[0]), )
       iter = 1
       for i in range(len(test_data)-1):
-        with tf.name_scope("Test"):
-          test_input = PTBInput(
-              config=eval_config, data=test_data, name="TestInput",iter=iter)
-          with tf.variable_scope("Model", reuse=True):
-              mtest = PTBModel(is_training=False, config=eval_config,
-                           input_=test_input, name="Test")
-        run_epoch(session,mtest)
+        #with tf.name_scope("Test"):
+          #test_input.epoch_size = len(test_data[iter])
+          #tdata = tf.convert_to_tensor(test_data[iter], name="raw_test_data", dtype=tf.int32)
+          #rdata = tf.reshape(tdata, [1, test_input.epoch_size])
+          #i = tf.train.range_input_producer(test_input.epoch_size, shuffle=False).dequeue()
+          #x = tf.strided_slice(rdata, [0, i],
+          #              [1, (i + 1)])
+          #x.set_shape([1, 1])
+          #test_input.input_data = x
+          #test_input = PTBInput(
+          #    config=eval_config, data=test_data, name="TestInput",iter=iter)
+          #with tf.variable_scope("Model", reuse=True):
+          #    mtest = PTBModel(is_training=False, config=eval_config,
+          #                 input_=test_input, name="Test")
+        run_epoch(session,mtest, input=test_data[iter], ep_size = len(test_data[iter]), of=of)
+        #run_epoch(session,mtest, input=test_input)#test_data[iter], ep_size = len(test_data[iter]))
         iter += 1
+      of.close()
       quit()
 
+    # If we are training a model ....
     initializer = tf.random_uniform_initializer(-config.init_scale,
                                                   config.init_scale)
     with tf.name_scope("Train"):
@@ -619,17 +621,7 @@ def main(_):
     tf.train.import_meta_graph(metagraph)
     for model in models.values():
       model.import_ops()
-    tmodels = []
-    iter=0
-    #for s in test_data:
-    #with tf.name_scope("Test"):
-    #  test_input = PTBInput(
-    #    config=eval_config, data=test_data, name="TestInput",iter=iter)
-    #  with tf.variable_scope("Model", reuse=True, initializer=initializer):
-    #    mtest = PTBModel(is_training=False, config=eval_config,
-    #                   input_=test_input)
-    #    tmodels.append(mtest)
-    #  iter += 1
+    
     sv = tf.train.Supervisor(logdir=FLAGS.save_path)
     config_proto = tf.ConfigProto(allow_soft_placement=soft_placement)
     with sv.managed_session(config=config_proto) as session:
@@ -652,7 +644,6 @@ def main(_):
             print("SAVED TO: %s." % sv.saver.save(session, FLAGS.save_path, global_step=sv.global_step))
             sv.saver.export_meta_graph(FLAGS.save_path + ".meta")
 
-        #for i in range(len(tmodels)):
       else:
         
         test_perplexity = run_epoch(session, mtest)
