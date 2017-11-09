@@ -371,8 +371,8 @@ class MediumConfig(object):
   max_max_epoch = 39
   keep_prob = 0.5
   lr_decay = 0.8
-  batch_size = 20
-  vocab_size = 25369
+  batch_size = 30
+  vocab_size = 24911
   rnn_mode = BLOCK
 
 
@@ -442,13 +442,16 @@ def run_epoch(session, model, eval_op=None, verbose=False, ep_size=None, input=N
     fetches["eval_op"] = eval_op
 
   tf.train.start_queue_runners(session)
+  if ep_size is None:
+    ep_size = model.input.epoch_size
   for step in range(ep_size):
     feed_dict = {}
     for i, (c, h) in enumerate(model.initial_state):
       feed_dict[c] = state[i].c
       feed_dict[h] = state[i].h
     
-    feed_dict[model.x] = [[input[step]]]
+    if input is not None:
+      feed_dict[model.x] = [[input[step]]]
       
     vals = session.run(fetches, feed_dict)
     cost = vals["cost"]
@@ -464,7 +467,8 @@ def run_epoch(session, model, eval_op=None, verbose=False, ep_size=None, input=N
              iters * model.input.batch_size * max(1, FLAGS.num_gpus) /
              (time.time() - start_time)))
 
-  of.write(str(logits[0][0]) + " " + str(logits[0][1]) + " " + str(logits[0][2]) + "\n")
+  if of is not None:
+    of.write(str(logits[0][0]) + " " + str(logits[0][1]) + " " + str(logits[0][2]) + "\n")
   #print(logits)
   max_val = 0
   ind = 0
@@ -637,7 +641,7 @@ def main(_):
           print("Epoch: %d Train Perplexity: %.3f" % (i + 1, train_perplexity))
           #valid_perplexity = run_epoch(session, mvalid)
           #print("Epoch: %d Valid Perplexity: %.3f" % (i + 1, valid_perplexity))
-          test_perplexity = run_epoch(session, mtest)
+          #test_perplexity = run_epoch(session, mtest)
           
           if FLAGS.save_path:
             print("Saving model to %s." % FLAGS.save_path)

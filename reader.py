@@ -99,7 +99,7 @@ def ptb_raw_data(data_path=None):
   test_dataw = []
   for s in test_set.target:
     test_dataw.append( [ word.lower() if word != '.' else '<eos>' for word in nltk.word_tokenize(s) ] )
-    test_dataw[-1].insert(0, '<eos>')
+    #test_dataw[-1].insert(0, '<eos>')
   test_data = []
   for s in test_dataw:
     test_data.append( [ word_to_id[word] for word in s if word in word_to_id ] )
@@ -167,7 +167,7 @@ def ptb_producer(raw_data, batch_size, num_steps, name=None):
     x = tf.strided_slice(data, [0, i * num_steps],
                         [batch_size, (i + 1) * num_steps])
     x.set_shape([batch_size, num_steps])
-    y = tf.strided_slice(tar_data, [0, i * num_steps + 1],
-                         [batch_size, (i + 1) * num_steps + 1])
+    y = tf.strided_slice(tar_data, [0, i * num_steps],
+                         [batch_size, (i + 1) * num_steps])
     y.set_shape([batch_size, num_steps])
     return x, y, batch_size
