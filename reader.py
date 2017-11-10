@@ -126,20 +126,20 @@ def ptb_producer(raw_data, batch_size, num_steps, name=None):
     s = 0
     lens = {}
     rd = []
-    for a in ['EAP','MWS','HPL']:
+    for a in ['EAP']:#,'MWS','HPL']:
       s += len(raw_data[a])
     batch_len = s // batch_size
     s = 0
-    for a in ['EAP','MWS','HPL']:
+    for a in ['EAP']:#,'MWS','HPL']:
       lens[a] = len(raw_data[a]) // batch_len
     min_len = 30000
-    for a in ['EAP','MWS','HPL']:
+    for a in ['EAP']:#,'MWS','HPL']:
       if lens[a] < min_len:
         min_len = lens[a]
-    for a in ['EAP','MWS','HPL']:
+    for a in ['EAP']:#,'MWS','HPL']:
       rd += raw_data[a][0 : min_len * batch_len]
       s += len(raw_data[a]) // batch_len
-    batch_size = min_len*3#s
+    batch_size = min_len#*3#s
     
     raw_data = tf.convert_to_tensor(rd, name="raw_data", dtype=tf.int32)
 
@@ -147,14 +147,14 @@ def ptb_producer(raw_data, batch_size, num_steps, name=None):
     #batch_len = data_len // batch_size
     data = tf.reshape(raw_data[0 : batch_size * batch_len],
                       [batch_size, batch_len])
-    t_data = []
-    ind = 0
-    for a in ['EAP','MWS','HPL']:
-      for _ in range(min_len * batch_len):
-        t_data.append(ind)
-      ind += 1
-    t_data = tf.convert_to_tensor(t_data, name="t_data", dtype=tf.int32)
-    tar_data = tf.reshape(t_data, [batch_size, batch_len])
+    #t_data = []
+    #ind = 0
+    #for a in ['EAP','MWS','HPL']:
+    #  for _ in range(min_len * batch_len):
+    #    t_data.append(ind)
+    #  ind += 1
+    #t_data = tf.convert_to_tensor(t_data, name="t_data", dtype=tf.int32)
+    #tar_data = tf.reshape(t_data, [batch_size, batch_len])
 
     epoch_size = (batch_len - 1) // num_steps
     assertion = tf.assert_positive(
@@ -167,7 +167,7 @@ def ptb_producer(raw_data, batch_size, num_steps, name=None):
     x = tf.strided_slice(data, [0, i * num_steps],
                         [batch_size, (i + 1) * num_steps])
     x.set_shape([batch_size, num_steps])
-    y = tf.strided_slice(tar_data, [0, i * num_steps],
-                         [batch_size, (i + 1) * num_steps])
+    y = tf.strided_slice(data, [0, i * num_steps + 1],
+                         [batch_size, (i + 1) * num_steps + 1])
     y.set_shape([batch_size, num_steps])
     return x, y, batch_size

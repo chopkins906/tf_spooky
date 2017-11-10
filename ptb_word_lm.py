@@ -89,8 +89,8 @@ class PTBInput(object):
       self.input_data, self.targets, self.batch_size = reader.ptb_producer(
         data, batch_size, num_steps, name=name)
     else:
-      self.epoch_size = len(data[iter])
-      tdata = tf.convert_to_tensor(data[iter], name="raw_test_data", dtype=tf.int32)
+      self.epoch_size = len(data[iter]) - 1
+      tdata = tf.convert_to_tensor(data[iter][0:self.epoch_size], name="raw_test_data", dtype=tf.int32)
       rdata = tf.reshape(tdata, [1, self.epoch_size])
       i = tf.train.range_input_producer(self.epoch_size, shuffle=False).dequeue()
       x = tf.strided_slice(rdata, [0, i],
@@ -118,6 +118,7 @@ class PTBModel(object):
 
     if not is_training:
       self.x = tf.placeholder(tf.int32, shape=[1,1])
+      self.y = tf.placeholder(tf.int32, shape=[1,1])
       with tf.device("/cpu:0"):
         embedding = tf.get_variable(
             "embedding", [vocab_size, size], dtype=data_type())
@@ -134,32 +135,42 @@ class PTBModel(object):
     output, state = self._build_rnn_graph(inputs, config, is_training)
 
     softmax_w = tf.get_variable(
-        "softmax_w", [size, 3], dtype=data_type())
-    softmax_b = tf.get_variable("softmax_b", [3], dtype=data_type())
+        "softmax_w", [size, vocab_size], dtype=data_type())
+    softmax_b = tf.get_variable("softmax_b", [vocab_size], dtype=data_type())
     logits = tf.nn.xw_plus_b(output, softmax_w, softmax_b)
      # Reshape logits to be a 3-D tensor for sequence loss
-    logits = tf.reshape(logits, [self.batch_size, self.num_steps, 3])
-    tmp = tf.reduce_sum(logits,1)
-    #for i in range(self.batch_size):
-    self._logits = tf.nn.softmax(tmp, name="LOGITS")
+    logits = tf.reshape(logits, [self.batch_size, self.num_steps, vocab_size])
+    #tmp = tf.reduce_sum(logits,1)
+    #self._logits = tf.nn.softmax(tmp, name="LOGITS")
 
-    if not is_training:
-      self._cost = tf.constant(0.0)
-      self._final_state = state
-      return
+    #if not is_training:
+    #  self._cost = tf.constant(0.0)
+    #  self._final_state = state
+    #  return
     
-    # Use the contrib sequence loss and average over the batches
-    loss = tf.contrib.seq2seq.sequence_loss(
-        logits,
-        input_.targets,
-        tf.ones([self.batch_size, self.num_steps], dtype=data_type()),
-        average_across_timesteps=False,
-        average_across_batch=True)
+    if is_training:
+      # Use the contrib sequence loss and average over the batches
+      loss = tf.contrib.seq2seq.sequence_loss(
+          logits,
+          input_.targets,
+          tf.ones([self.batch_size, self.num_steps], dtype=data_type()),
+          average_across_timesteps=False,
+          average_across_batch=True)
+    else:
+      # Use the contrib sequence loss and average over the batches
+      loss = tf.contrib.seq2seq.sequence_loss(
+          logits,
+          self.y,
+          tf.ones([self.batch_size, self.num_steps], dtype=data_type()),
+          average_across_timesteps=False,
+          average_across_batch=True)
 
     # Update the cost
     self._cost = tf.reduce_sum(loss)
     self._final_state = state
     
+    if not is_training:
+      return
 
     self._lr = tf.Variable(0.0, trainable=False)
     tvars = tf.trainable_variables()
@@ -253,7 +264,7 @@ class PTBModel(object):
   def export_ops(self, name):
     """Exports ops to collections."""
     self._name = name
-    ops = {util.with_prefix(self._name, "cost"): self._cost,util.with_prefix(self._name, "logits"): self._logits}
+    ops = {util.with_prefix(self._name, "cost"): self._cost}#util.with_prefix(self._name, "logits"): self._logits}
     if self._is_training:
       ops.update(lr=self._lr, new_lr=self._new_lr, lr_update=self._lr_update)
       if self._rnn_params:
@@ -282,7 +293,7 @@ class PTBModel(object):
             base_variable_scope="Model/RNN")
         tf.add_to_collection(tf.GraphKeys.SAVEABLE_OBJECTS, params_saveable)
     self._cost = tf.get_collection_ref(util.with_prefix(self._name, "cost"))[0]
-    self._logits = tf.get_collection_ref(util.with_prefix(self._name, "logits"))[0]
+    #self._logits = tf.get_collection_ref(util.with_prefix(self._name, "logits"))[0]
     num_replicas = FLAGS.num_gpus if self._name == "Train" else 1
     self._initial_state = util.import_state_tuples(
         self._initial_state, self._initial_state_name, num_replicas)
@@ -343,37 +354,37 @@ class SmallConfig(object):
   rnn_mode = BASIC
 
 
-#class MediumConfig(object):
-#  """Medium config."""
-#  init_scale = 0.05
-#  learning_rate = 0.825#1.0
-#  max_grad_norm = 5
-#  num_layers = 3#2
-#  num_steps = 35
-#  hidden_size = 650
-#  max_epoch = 10#6
-#  max_max_epoch = 50#39
-#  keep_prob = 0.4#0.5
-#  lr_decay = 0.85#0.8
-#  batch_size = 30#20
-#  vocab_size = 24911#25369
-#  rnn_mode = BLOCK
-  
 class MediumConfig(object):
   """Medium config."""
   init_scale = 0.05
   learning_rate = 1.0
   max_grad_norm = 5
-  num_layers = 2
+  num_layers = 3#2
   num_steps = 35
   hidden_size = 650
-  max_epoch = 6
-  max_max_epoch = 39
-  keep_prob = 0.5
+  max_epoch = 10#6
+  max_max_epoch = 50#39
+  keep_prob = 0.4#0.5
   lr_decay = 0.8
-  batch_size = 30
-  vocab_size = 24911
+  batch_size = 10#20
+  vocab_size = 24911#25369
   rnn_mode = BLOCK
+  
+#class MediumConfig(object):
+#  """Medium config."""
+#  init_scale = 0.05
+#  learning_rate = 1.0
+#  max_grad_norm = 5
+#  num_layers = 2
+#  num_steps = 35
+#  hidden_size = 650
+#  max_epoch = 6
+#  max_max_epoch = 39
+#  keep_prob = 0.5
+#  lr_decay = 0.8
+#  batch_size = 30
+#  vocab_size = 24911
+#  rnn_mode = BLOCK
 
 
 class LargeConfig(object):
@@ -434,7 +445,7 @@ def run_epoch(session, model, eval_op=None, verbose=False, ep_size=None, input=N
   fetches = {
       "cost": model.cost,
       "final_state": model.final_state,
-      "logits": model.logits,
+      #"logits": model.logits,
   }
 
   
@@ -452,11 +463,12 @@ def run_epoch(session, model, eval_op=None, verbose=False, ep_size=None, input=N
     
     if input is not None:
       feed_dict[model.x] = [[input[step]]]
+      feed_dict[model.y] = [[input[step+1]]]
       
     vals = session.run(fetches, feed_dict)
     cost = vals["cost"]
     state = vals["final_state"]
-    logits = vals["logits"]
+    #logits = vals["logits"]
 
     costs += cost
     iters += model.input.num_steps
@@ -468,7 +480,7 @@ def run_epoch(session, model, eval_op=None, verbose=False, ep_size=None, input=N
              (time.time() - start_time)))
 
   if of is not None:
-    of.write(str(logits[0][0]) + " " + str(logits[0][1]) + " " + str(logits[0][2]) + "\n")
+    of.write(str(np.exp(-costs/iters))+"\n")#str(logits[0][0]) + " " + str(logits[0][1]) + " " + str(logits[0][2]) + "\n")
   #print(logits)
   max_val = 0
   ind = 0
@@ -561,8 +573,8 @@ def main(_):
       #quit()
       #mtest.import_ops()
       print("Model restored from %s." % FLAGS.load_path)
-      of = open("output", 'w')
-      run_epoch(session, mtest, input=test_data[0], ep_size=len(test_data[0]), of=of)
+      of = open("MWS2.out", 'w')
+      run_epoch(session, mtest, input=test_data[0], ep_size=len(test_data[0])-1, of=of)
       #run_epoch(session, mtest, input=test_input)#, ep_size=len(test_data[0]), )
       iter = 1
       for i in range(len(test_data)-1):
@@ -580,7 +592,7 @@ def main(_):
           #with tf.variable_scope("Model", reuse=True):
           #    mtest = PTBModel(is_training=False, config=eval_config,
           #                 input_=test_input, name="Test")
-        run_epoch(session,mtest, input=test_data[iter], ep_size = len(test_data[iter]), of=of)
+        run_epoch(session,mtest, input=test_data[iter], ep_size = len(test_data[iter])-1, of=of)
         #run_epoch(session,mtest, input=test_input)#test_data[iter], ep_size = len(test_data[iter]))
         iter += 1
       of.close()
