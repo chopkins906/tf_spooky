@@ -354,37 +354,37 @@ class SmallConfig(object):
   rnn_mode = BASIC
 
 
-class MediumConfig(object):
-  """Medium config."""
-  init_scale = 0.05
-  learning_rate = 1.0
-  max_grad_norm = 5
-  num_layers = 3#2
-  num_steps = 35
-  hidden_size = 650
-  max_epoch = 10#6
-  max_max_epoch = 50#39
-  keep_prob = 0.4#0.5
-  lr_decay = 0.8
-  batch_size = 10#20
-  vocab_size = 24911#25369
-  rnn_mode = BLOCK
-  
 #class MediumConfig(object):
 #  """Medium config."""
 #  init_scale = 0.05
 #  learning_rate = 1.0
 #  max_grad_norm = 5
-#  num_layers = 2
+#  num_layers = 3#2
 #  num_steps = 35
 #  hidden_size = 650
-#  max_epoch = 6
-#  max_max_epoch = 39
-#  keep_prob = 0.5
+#  max_epoch = 10#6
+#  max_max_epoch = 50#39
+#  keep_prob = 0.4#0.5
 #  lr_decay = 0.8
-#  batch_size = 30
-#  vocab_size = 24911
+#  batch_size = 10#20
+#  vocab_size = 24911#25369
 #  rnn_mode = BLOCK
+  
+class MediumConfig(object):
+  """Medium config."""
+  init_scale = 0.05
+  learning_rate = 0.1
+  max_grad_norm = 5
+  num_layers = 2
+  num_steps = 35
+  hidden_size = 650
+  max_epoch = 10
+  max_max_epoch = 20
+  keep_prob = 0.5
+  lr_decay = 0.8
+  batch_size = 30
+  vocab_size = 24911
+  rnn_mode = BLOCK
 
 
 class LargeConfig(object):
@@ -479,27 +479,30 @@ def run_epoch(session, model, eval_op=None, verbose=False, ep_size=None, input=N
              iters * model.input.batch_size * max(1, FLAGS.num_gpus) /
              (time.time() - start_time)))
 
+  # save e^(-c) where c is cost per word - for use in an inverse-softmax classifier based on running a text
+  # through each author's trained network
   if of is not None:
     of.write(str(np.exp(-costs/iters))+"\n")#str(logits[0][0]) + " " + str(logits[0][1]) + " " + str(logits[0][2]) + "\n")
   #print(logits)
-  max_val = 0
-  ind = 0
-  max_ind = -1
+  #max_val = 0
+  #ind = 0
+  #max_ind = -1
   #print("%6.2f%6.2f%6.2f" % (logits[0][0],logits[0][1],logits[0][2]))
   return np.exp(costs / iters)
-  for l in logits[0]:
-    if l > max_val:
-      max_val = l
-      max_ind = ind
-    ind += 1
-  if max_ind == 0:
-    print('EAP')# (', max * 100, '%)')
-  elif max_ind == 1:
-    print('MWS')# (', max * 100, '%)')
-  else:
-    print('HPL')# (', max * 100, '%)')
-      
-  return np.exp(costs / iters)
+  
+  #for l in logits[0]:
+  #  if l > max_val:
+  #    max_val = l
+  #    max_ind = ind
+  #  ind += 1
+  #if max_ind == 0:
+  #  print('EAP')# (', max * 100, '%)')
+  #elif max_ind == 1:
+  #  print('MWS')# (', max * 100, '%)')
+  #else:
+  #  print('HPL')# (', max * 100, '%)')
+  #    
+  #return np.exp(costs / iters)
 
 
 def get_config():
@@ -566,32 +569,14 @@ def main(_):
       session = tf.InteractiveSession()
       saver = tf.train.Saver()#tf.train.import_meta_graph(FLAGS.load_path + ".meta")
       saver.restore(session, FLAGS.load_path)
-      #tf.train.start_queue_runners(session)
-      #print(session.run(test_input.input_data))
-      #print(session.run(test_input.input_data))
-      #print(session.run(test_input.input_data))
-      #quit()
+      
       #mtest.import_ops()
       print("Model restored from %s." % FLAGS.load_path)
-      of = open("MWS2.out", 'w')
+      of = open("HPL2.out", 'w')
       run_epoch(session, mtest, input=test_data[0], ep_size=len(test_data[0])-1, of=of)
       #run_epoch(session, mtest, input=test_input)#, ep_size=len(test_data[0]), )
       iter = 1
       for i in range(len(test_data)-1):
-        #with tf.name_scope("Test"):
-          #test_input.epoch_size = len(test_data[iter])
-          #tdata = tf.convert_to_tensor(test_data[iter], name="raw_test_data", dtype=tf.int32)
-          #rdata = tf.reshape(tdata, [1, test_input.epoch_size])
-          #i = tf.train.range_input_producer(test_input.epoch_size, shuffle=False).dequeue()
-          #x = tf.strided_slice(rdata, [0, i],
-          #              [1, (i + 1)])
-          #x.set_shape([1, 1])
-          #test_input.input_data = x
-          #test_input = PTBInput(
-          #    config=eval_config, data=test_data, name="TestInput",iter=iter)
-          #with tf.variable_scope("Model", reuse=True):
-          #    mtest = PTBModel(is_training=False, config=eval_config,
-          #                 input_=test_input, name="Test")
         run_epoch(session,mtest, input=test_data[iter], ep_size = len(test_data[iter])-1, of=of)
         #run_epoch(session,mtest, input=test_input)#test_data[iter], ep_size = len(test_data[iter]))
         iter += 1
@@ -642,7 +627,7 @@ def main(_):
     config_proto = tf.ConfigProto(allow_soft_placement=soft_placement)
     with sv.managed_session(config=config_proto) as session:
       if not FLAGS.load_path:
-        #sv.saver.restore(session, FLAGS.save_path + "-12658")
+        sv.saver.restore(session, FLAGS.save_path + "-13450")
         for i in range(config.max_max_epoch):
           lr_decay = config.lr_decay ** max(i + 1 - config.max_epoch, 0.0)
           m.assign_lr(session, config.learning_rate * lr_decay)

@@ -99,7 +99,7 @@ def ptb_raw_data(data_path=None):
   test_dataw = []
   for s in test_set.target:
     test_dataw.append( [ word.lower() if word != '.' else '<eos>' for word in nltk.word_tokenize(s) ] )
-    #test_dataw[-1].insert(0, '<eos>')
+    test_dataw[-1].insert(0, '<eos>')
   test_data = []
   for s in test_dataw:
     test_data.append( [ word_to_id[word] for word in s if word in word_to_id ] )
@@ -123,38 +123,17 @@ def ptb_producer(raw_data, batch_size, num_steps, name=None):
     tf.errors.InvalidArgumentError: if batch_size or num_steps are too high.
   """
   with tf.name_scope(name, "PTBProducer", [raw_data, batch_size, num_steps]):
-    s = 0
-    lens = {}
     rd = []
-    for a in ['EAP']:#,'MWS','HPL']:
-      s += len(raw_data[a])
-    batch_len = s // batch_size
-    s = 0
-    for a in ['EAP']:#,'MWS','HPL']:
-      lens[a] = len(raw_data[a]) // batch_len
-    min_len = 30000
-    for a in ['EAP']:#,'MWS','HPL']:
-      if lens[a] < min_len:
-        min_len = lens[a]
-    for a in ['EAP']:#,'MWS','HPL']:
-      rd += raw_data[a][0 : min_len * batch_len]
-      s += len(raw_data[a]) // batch_len
-    batch_size = min_len#*3#s
+    a = 'EAP' #'EAP', 'MWS', 'HPL'
+    
+    batch_len = len(raw_data[a]) // batch_size
+    rd += raw_data[a][0 : batch_size * batch_len]
     
     raw_data = tf.convert_to_tensor(rd, name="raw_data", dtype=tf.int32)
 
     data_len = tf.size(raw_data)
-    #batch_len = data_len // batch_size
     data = tf.reshape(raw_data[0 : batch_size * batch_len],
                       [batch_size, batch_len])
-    #t_data = []
-    #ind = 0
-    #for a in ['EAP','MWS','HPL']:
-    #  for _ in range(min_len * batch_len):
-    #    t_data.append(ind)
-    #  ind += 1
-    #t_data = tf.convert_to_tensor(t_data, name="t_data", dtype=tf.int32)
-    #tar_data = tf.reshape(t_data, [batch_size, batch_len])
 
     epoch_size = (batch_len - 1) // num_steps
     assertion = tf.assert_positive(
